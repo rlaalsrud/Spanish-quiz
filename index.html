@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>스페인어 퀴즈 챌린지</title>
+    <style>
+        :root {
+            --primary-color: #4a90e2;
+            --success-color: #4caf50;
+            --error-color: #f44336;
+            --bg-color: #f5f7fa;
+            --card-bg: #ffffff;
+            --text-color: #333;
+        }
+
+        * { box-sizing: border-box; font-family: 'Pretendard', -apple-system, sans-serif; }
+        body { background-color: var(--bg-color); color: var(--text-color); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; }
+        
+        .container { background: var(--card-bg); width: 100%; max-width: 500px; padding: 30px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; }
+        .hidden { display: none; }
+
+        /* UI Elements */
+        h1 { margin-bottom: 20px; color: var(--primary-color); }
+        .stats { display: flex; justify-content: space-between; margin-bottom: 20px; font-weight: bold; color: #666; }
+        .question { font-size: 2rem; font-weight: bold; margin-bottom: 30px; }
+        
+        .options { display: grid; gap: 10px; }
+        .btn { padding: 15px; border: 2px solid #eee; border-radius: 12px; background: white; cursor: pointer; font-size: 1.1rem; transition: all 0.2s; outline: none; }
+        .btn:hover { background: #f0f7ff; border-color: var(--primary-color); }
+        .btn.correct { background-color: var(--success-color) !important; color: white; border-color: var(--success-color); }
+        .btn.wrong { background-color: var(--error-color) !important; color: white; border-color: var(--error-color); }
+
+        .start-btn, .save-btn, .restart-btn { background: var(--primary-color); color: white; border: none; padding: 15px 30px; border-radius: 12px; font-size: 1.1rem; cursor: pointer; margin-top: 20px; width: 100%; }
+        
+        input[type="text"] { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; margin-top: 10px; font-size: 1rem; }
+        
+        .ranking-list { text-align: left; margin: 20px 0; padding: 0; list-style: none; }
+        .ranking-item { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; }
+        .ranking-item:last-child { border-bottom: none; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- 시작 화면 -->
+        <div id="start-screen">
+            <h1>스페인어 퀴즈</h1>
+            <p>10문제를 풀고 랭킹에 도전하세요!</p>
+            <button class="start-btn" onclick="startGame()">게임 시작</button>
+        </div>
+
+        <!-- 게임 화면 -->
+        <div id="game-screen" class="hidden">
+            <div class="stats">
+                <span id="progress">1/10</span>
+                <span id="current-score">점수: 0</span>
+            </div>
+            <div class="question" id="question-text">Word</div>
+            <div class="options" id="options-container">
+                <!-- 버튼 4개 동적 생성 -->
+            </div>
+        </div>
+
+        <!-- 결과 및 저장 화면 -->
+        <div id="result-screen" class="hidden">
+            <h1>게임 종료!</h1>
+            <p>최종 점수: <span id="final-score" style="font-weight:bold; font-size: 1.5rem;">0</span>점</p>
+            <input type="text" id="nickname" placeholder="닉네임을 입력하세요" maxlength="10">
+            <button class="save-btn" id="save-btn" onclick="saveScore()">점수 저장 및 랭킹 보기</button>
+        </div>
+
+        <!-- 랭킹 화면 -->
+        <div id="ranking-screen" class="hidden">
+            <h1>TOP 5 랭킹</h1>
+            <ul class="ranking-list" id="ranking-list">
+                <!-- 랭킹 데이터 삽입 -->
+            </ul>
+            <button class="restart-btn" onclick="location.reload()">다시 하기</button>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        // [Firebase 설정]
+        const firebaseConfig = {
+            // const firebaseConfig = {
+  apiKey: "AIzaSyArYYbhIqJrpVwOD1Cb6a2PWP5xLpSqMjg",
+  authDomain: "spanish-quiz-772a4.firebaseapp.com",
+  projectId: "spanish-quiz-772a4",
+  storageBucket: "spanish-quiz-772a4.firebasestorage.app",
+  messagingSenderId: "932754763764",
+  appId: "1:932754763764:web:65649df206e3b5c30c93a1",
+  measurementId: "G-M06757Y0T3"
+};
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // 퀴즈 데이터 (10문제)
+        const quizData = [
+            { q: "agua", a: "물", o: ["물", "우유", "생명", "바지"] },
+            { q: "leche", a: "우유", o: ["의자", "연필", "음료", "우유"] },
+            { q: "guapo/a", a: "잘생긴", o: ["예쁜", "귀여운", "잘생긴", "교활한"] },
+            { q: "estudiar", a: "공부하다", o: ["먹다", "계획하다", "공부하다", "걷다"] },
+            { q: "dormir", a: "자다", o: ["공격하다", "먹다", "일하다", "자다"] },
+            { q: "mono/a", a: "귀여운", o: ["우아한", "신중한", "귀여운", "활발한"] },
+            { q: "cooperar", a: "협력하다", o: ["일하다", "협력하다", "독립하다", "하다"] },
+            { q: "comer", a: "먹다", o: ["경쟁하다", "협력하다", "먹다", "지배하다"] },
+            { q: "cimida", a: "음식", o: ["음료", "근면", "음식", "친절"] },
+            { q: "vago", a: "모호한", o: ["명확한", "모호한", "단순한", "거창한"] }
+        ];
+
+        let currentIdx = 0;
+        let score = 0;
+        let isProcessing = false;
+
+        // 게임 시작
+        window.startGame = () => {
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('game-screen').classList.remove('hidden');
+            loadQuestion();
+        };
+
+        // 문제 로드
+        function loadQuestion() {
+            isProcessing = false;
+            const qData = quizData[currentIdx];
+            document.getElementById('progress').innerText = `${currentIdx + 1}/10`;
+            document.getElementById('current-score').innerText = `점수: ${score}`;
+            document.getElementById('question-text').innerText = qData.q;
+            
+            const container = document.getElementById('options-container');
+            container.innerHTML = '';
+            
+            qData.o.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.className = 'btn';
+                btn.innerText = opt;
+                btn.onclick = () => checkAnswer(btn, opt);
+                container.appendChild(btn);
+            });
+        }
+
+        // 정답 확인
+        function checkAnswer(btn, selected) {
+            if (isProcessing) return;
+            isProcessing = true;
+
+            const correct = quizData[currentIdx].a;
+            if (selected === correct) {
+                btn.classList.add('correct');
+                score += 10;
+            } else {
+                btn.classList.add('wrong');
+                // 정답인 버튼도 같이 표시
+                Array.from(document.querySelectorAll('.btn')).forEach(b => {
+                    if (b.innerText === correct) b.classList.add('correct');
+                });
+            }
+
+            setTimeout(() => {
+                currentIdx++;
+                if (currentIdx < quizData.length) {
+                    loadQuestion();
+                } else {
+                    showResult();
+                }
+            }, 1200);
+        }
+
+        // 결과 표시
+        function showResult() {
+            document.getElementById('game-screen').classList.add('hidden');
+            document.getElementById('result-screen').classList.remove('hidden');
+            document.getElementById('final-score').innerText = score;
+        }
+
+        // 점수 저장
+        window.saveScore = async () => {
+            const nickname = document.getElementById('nickname').value.trim();
+            if (!nickname) return alert("닉네임을 입력해주세요!");
+
+            const saveBtn = document.getElementById('save-btn');
+            saveBtn.disabled = true;
+            saveBtn.innerText = "저장 중...";
+
+            try {
+                await addDoc(collection(db, "scores"), {
+                    nickname: nickname,
+                    score: score,
+                    timestamp: serverTimestamp()
+                });
+                loadRankings();
+            } catch (e) {
+                console.error("Error adding document: ", e);
+                alert("저장 실패!");
+                saveBtn.disabled = false;
+            }
+        };
+
+        // 랭킹 로드
+        async function loadRankings() {
+            document.getElementById('result-screen').classList.add('hidden');
+            document.getElementById('ranking-screen').classList.remove('hidden');
+            
+            const q = query(collection(db, "scores"), orderBy("score", "desc"), limit(5));
+            const querySnapshot = await getDocs(q);
+            const rankingList = document.getElementById('ranking-list');
+            rankingList.innerHTML = '';
+
+            let rank = 1;
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                const li = document.createElement('li');
+                li.className = 'ranking-item';
+                li.innerHTML = `<span>${rank++}. ${data.nickname}</span> <span>${data.score}점</span>`;
+                rankingList.appendChild(li);
+            });
+        }
+    </script>
+</body>
+</html>
